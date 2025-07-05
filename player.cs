@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 public class player : MonoBehaviour
@@ -23,12 +25,12 @@ public class player : MonoBehaviour
 
     [Header("Player Status")]
     public int nyawa = 3;
-    private Vector3 posisiAwal;
+    private Vector3 posisiRespawn;
     private bool bisaKenaDamage = true;
     public float delayDamage = 1f;
 
     [Header("Jatuh Game Over")]
-    public float batasJatuh = -10f; // Tambahan: batas bawah Y sebelum dianggap jatuh
+    public float batasJatuh = -25f;
 
     [Header("Icon Nyawa")]
     public GameObject[] ikonNyawa;
@@ -44,8 +46,9 @@ public class player : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        posisiAwal = transform.position;
+        posisiRespawn = transform.position;
     }
+
     void Update()
     {
         // Deteksi tanah
@@ -63,30 +66,36 @@ public class player : MonoBehaviour
             arahGerak = -1;
         }
 
-        // Melompat ke atas
+        // Melompat
         if (Input.GetKeyDown(KeyCode.W) && isGrounded)
         {
             rb.AddForce(Vector2.up * kekuatanLompat, ForceMode2D.Impulse);
         }
 
-        // Batasi kecepatan lompat agar tidak terlalu tinggi
+        // Batas kecepatan lompat
         if (rb.linearVelocity.y > 8f)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, 8f);
         }
 
-        // Balik arah jika perlu
+        // Balik arah visual
         if (arahGerak > 0 && !menghadapKanan || arahGerak < 0 && menghadapKanan)
         {
             BalikArah();
         }
 
-        // Tambahan: Cek jika jatuh
+        // ✅ DETEKSI JATUH
         if (transform.position.y < batasJatuh)
         {
-            KurangiNyawa(1);
+            KurangiNyawa(1); // atau langsung Mati(); kalau tanpa nyawa
         }
     }
+
+    void OnDrawGizmosSelected()
+{
+    Gizmos.color = Color.red;
+    Gizmos.DrawLine(new Vector3(-100, batasJatuh, 0), new Vector3(100, batasJatuh, 0));
+}
 
     void BalikArah()
     {
@@ -95,40 +104,39 @@ public class player : MonoBehaviour
         skala.x *= -1;
         transform.localScale = skala;
     }
-   void OnTriggerEnter2D(Collider2D collision)
-{
-    if (collision.CompareTag("bintang"))
+
+    void OnTriggerEnter2D(Collider2D collision)
     {
-        collision.tag = "Untagged"; // Cegah double trigger
-        TambahBintang(1);
-        Destroy(collision.gameObject);
-    }
-    else if (collision.CompareTag("rumah"))
-    {
-        Debug.Log("Masuk rumah!");
-        gameObject.SetActive(false);
-        Time.timeScale = 0;
-        GameObject panel = GameObject.Find("FinishPanel");
-        if (panel != null)
+        if (collision.CompareTag("bintang"))
         {
-            panel.SetActive(true);
+            collision.tag = "Untagged";
+            TambahBintang(1);
+            Destroy(collision.gameObject);
+        }
+        else if (collision.CompareTag("Finish"))
+        {
+            collision.tag = "Finish";
+            Time.timeScale = 0;
+            SceneManager.LoadScene("FinishScene");
+        }
+        else if (collision.CompareTag("Checkpoint"))
+        {
+            posisiRespawn = collision.transform.position;
+            Debug.Log("Checkpoint disimpan di: " + posisiRespawn);
         }
     }
-}
+
     public void TambahNyawa(int jumlah)
     {
         nyawa += jumlah;
         Debug.Log("Nyawa bertambah. Total nyawa: " + nyawa);
-
-        // Update visual nyawa (jamur)
         for (int i = 0; i < ikonNyawa.Length; i++)
         {
             if (ikonNyawa[i] != null)
-            {
                 ikonNyawa[i].SetActive(i < nyawa);
-            }
         }
     }
+
     public void KurangiNyawa(int jumlah)
     {
         if (!bisaKenaDamage) return;
@@ -136,10 +144,10 @@ public class player : MonoBehaviour
         nyawa -= jumlah;
         Debug.Log("Nyawa tersisa: " + nyawa);
 
-        // Update visual nyawa (jamur)
         for (int i = 0; i < ikonNyawa.Length; i++)
         {
-            ikonNyawa[i].SetActive(i < nyawa);
+            if (ikonNyawa[i] != null)
+                ikonNyawa[i].SetActive(i < nyawa);
         }
 
         if (nyawa <= 0)
@@ -152,6 +160,7 @@ public class player : MonoBehaviour
             StartCoroutine(TundaDamage());
         }
     }
+
     public void TambahBintang(int jumlah)
     {
         jumlahBintang = Mathf.Min(jumlahBintang + jumlah, ikonBintang.Length);
@@ -160,9 +169,7 @@ public class player : MonoBehaviour
         for (int i = 0; i < ikonBintang.Length; i++)
         {
             if (ikonBintang[i] != null)
-            {
                 ikonBintang[i].SetActive(i < jumlahBintang);
-            }
         }
     }
 
@@ -179,6 +186,7 @@ public class player : MonoBehaviour
         }
         bisaKenaDamage = true;
     }
+
     void Mati()
     {
         Debug.Log("Player mati!");
@@ -187,14 +195,10 @@ public class player : MonoBehaviour
         SceneManager.LoadScene("GameOver");
     }
 
-    void RestartLevel()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
     void Respawn()
     {
-        Debug.Log("Respawn ke posisi awal.");
-        transform.position = posisiAwal;
+        Debug.Log("Respawn ke checkpoint.");
+        transform.position = posisiRespawn;
         rb.linearVelocity = Vector2.zero;
     }
 
